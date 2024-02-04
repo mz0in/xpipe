@@ -4,7 +4,6 @@ import io.xpipe.app.comp.store.StoreSortMode;
 import io.xpipe.app.issue.ErrorEvent;
 import io.xpipe.app.issue.TrackEvent;
 import io.xpipe.app.prefs.AppPrefs;
-import io.xpipe.app.util.XPipeSession;
 import io.xpipe.core.store.LocalStore;
 import lombok.Getter;
 import org.apache.commons.io.FileUtils;
@@ -25,6 +24,9 @@ public class StandardStorage extends DataStorage {
     @Getter
     private final GitStorageHandler gitStorageHandler;
 
+    @Getter
+    private boolean disposed;
+
     StandardStorage() {
         this.gitStorageHandler = GitStorageHandler.getInstance();
         this.gitStorageHandler.init(dir);
@@ -33,10 +35,6 @@ public class StandardStorage extends DataStorage {
     @Override
     protected void onReset() {
         gitStorageHandler.onReset();
-    }
-
-    private boolean isNewSession() {
-        return XPipeSession.get().isNewSystemSession();
     }
 
     private void deleteLeftovers() {
@@ -119,10 +117,12 @@ public class StandardStorage extends DataStorage {
 
         var storesDir = getStoresDir();
         var categoriesDir = getCategoriesDir();
+        var dataDir = getDataDir();
 
         try {
             FileUtils.forceMkdir(storesDir.toFile());
             FileUtils.forceMkdir(categoriesDir.toFile());
+            FileUtils.forceMkdir(dataDir.toFile());
         } catch (Exception e) {
             ErrorEvent.fromThrowable(e).terminal(true).build().handle();
         }
@@ -292,7 +292,7 @@ public class StandardStorage extends DataStorage {
                 entry.dirty = true;
                 entry.setStoreNode(DataStorageWriter.storeToNode(entry.getStore()));
             });
-            save();
+            save(false);
         }
 
         deleteLeftovers();
@@ -302,12 +302,13 @@ public class StandardStorage extends DataStorage {
         this.gitStorageHandler.afterStorageLoad();
     }
 
-    public void save() {
-        if (!loaded || disposed) {
+    public void save(boolean dispose) {
+        if (!busyIo.tryLock()) {
             return;
         }
 
-        if (!busyIo.tryLock()) {
+        if (!loaded || disposed) {
+            busyIo.unlock();
             return;
         }
 
@@ -363,6 +364,9 @@ public class StandardStorage extends DataStorage {
 
         deleteLeftovers();
         gitStorageHandler.afterStorageSave();
+        if (dispose) {
+            disposed = true;
+        }
         busyIo.unlock();
     }
 

@@ -8,10 +8,12 @@ import io.xpipe.core.process.CommandBuilder;
 import io.xpipe.core.process.OsType;
 import io.xpipe.core.process.ShellControl;
 import io.xpipe.core.store.FileNames;
+import io.xpipe.core.store.LocalStore;
 import lombok.Getter;
 import lombok.Value;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
@@ -87,6 +89,43 @@ public interface ExternalTerminalType extends PrefsChoiceValue {
         }
     };
 
+    ExternalTerminalType WINDOWS_TERMINAL_PREVIEW = new ExternalTerminalType() {
+
+        @Override
+        public void launch(LaunchConfiguration configuration) throws Exception {
+            // A weird behavior in Windows Terminal causes the trailing
+            // backslash of a filepath to escape the closing quote in the title argument
+            // So just remove that slash
+            var fixedName = FileNames.removeTrailingSlash(configuration.getTitle());
+            LocalShell.getShell()
+                    .executeSimpleCommand(CommandBuilder.of()
+                            .addFile(getPath().toString())
+                            .add("-w", "1", "nt", "--title")
+                            .addQuoted(fixedName)
+                            .addFile(configuration.getScriptFile()));
+        }
+
+        private Path getPath() {
+            var local = System.getenv("LOCALAPPDATA");
+            return Path.of(local).resolve("Microsoft\\WindowsApps\\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\\wt.exe");
+        }
+
+        @Override
+        public boolean isAvailable() {
+            return Files.exists(getPath());
+        }
+
+        @Override
+        public boolean isSelectable() {
+            return OsType.getLocal().equals(OsType.WINDOWS);
+        }
+
+        @Override
+        public String getId() {
+            return "app.windowsTerminalPreview";
+        }
+    };
+
     ExternalTerminalType WINDOWS_TERMINAL = new PathType("app.windowsTerminal", "wt.exe") {
 
         @Override
@@ -154,7 +193,6 @@ public interface ExternalTerminalType extends PrefsChoiceValue {
                 }
             }
 
-            Optional<Path> finalLocation = location;
             execute(location.get(), configuration);
         }
 
@@ -191,28 +229,38 @@ public interface ExternalTerminalType extends PrefsChoiceValue {
         }
     };
 
-    //    ExternalTerminalType WEZ_WINDOWS = new WindowsType("app.wezWindows", "wezterm") {
-    //
-    //        @Override
-    //        protected void execute(Path file, LaunchConfiguration configuration) throws Exception {
-    //            ThreadHelper.runFailableAsync(() -> {
-    //                new LocalStore().control().command(CommandBuilder.of().addFile(file.toString()).add("start", "-e",
-    // "cmd", "/c").addFile(configuration.getScriptFile())).execute();
-    //            });
-    //        }
-    //
-    //        @Override
-    //        protected Optional<Path> determineInstallation() {
-    //            Optional<String> launcherDir;
-    //            launcherDir = WindowsRegistry.readString(
-    //                            WindowsRegistry.HKEY_LOCAL_MACHINE,
-    //
-    // "Microsoft\\Windows\\CurrentVersion\\Uninstall\\{BCF6F0DA-5B9A-408D-8562-F680AE6E1EAF}_is1",
-    //                            "InstallLocation")
-    //                    .map(p -> p + "\\wezterm.exe");
-    //            return launcherDir.map(Path::of);
-    //        }
-    //    };
+        ExternalTerminalType WEZ_WINDOWS = new WindowsType("app.wezWindows", "wezterm-gui") {
+
+            @Override
+            protected void execute(Path file, LaunchConfiguration configuration) throws Exception {
+                new LocalStore().control().command(CommandBuilder.of().addFile(file.toString()).add("start")
+                        .addFile(configuration.getScriptFile())).execute();
+            }
+
+            @Override
+            protected Optional<Path> determineInstallation() {
+                Optional<String> launcherDir;
+                launcherDir = WindowsRegistry.readString(
+                                WindowsRegistry.HKEY_LOCAL_MACHINE,
+                                "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{BCF6F0DA-5B9A-408D-8562-F680AE6E1EAF}_is1",
+                                "InstallLocation")
+                        .map(p -> p + "\\wezterm-gui.exe");
+                return launcherDir.map(Path::of);
+            }
+        };
+
+    ExternalTerminalType WEZ_LINUX = new SimplePathType("app.wezLinux", "wezterm-gui") {
+
+        @Override
+        protected CommandBuilder toCommand(String name, String file) {
+            return CommandBuilder.of().add("start").addFile(file);
+        }
+
+        @Override
+        public boolean isSelectable() {
+            return OsType.getLocal().equals(OsType.LINUX);
+        }
+    };
 
     //    ExternalTerminalType HYPER_WINDOWS = new WindowsFullPathType("app.hyperWindows") {
     //
@@ -498,6 +546,20 @@ public interface ExternalTerminalType extends PrefsChoiceValue {
         }
     };
 
+    ExternalTerminalType WEZ_MACOS = new MacOsType("app.wezMacOs", "WezTerm") {
+
+        @Override
+        public void launch(LaunchConfiguration configuration) throws Exception {
+            var c = CommandBuilder.of()
+                            .addFile(getApplicationPath().orElseThrow().resolve("Contents").resolve("MacOS")
+                                    .resolve("wezterm-gui").toString())
+                            .add("start")
+                            .addFile(configuration.getScriptFile()).buildString(LocalShell.getShell());
+            c = ApplicationHelper.createDetachCommand(LocalShell.getShell(), c);
+            LocalShell.getShell().executeSimpleCommand(c);
+        }
+    };
+
     ExternalTerminalType KITTY_MACOS = new MacOsType("app.kittyMacOs", "kitty") {
 
         @Override
@@ -540,10 +602,13 @@ public interface ExternalTerminalType extends PrefsChoiceValue {
     List<ExternalTerminalType> ALL = Stream.of(
                     TABBY_WINDOWS,
                     ALACRITTY_WINDOWS,
+                    WEZ_WINDOWS,
+                    WINDOWS_TERMINAL_PREVIEW,
                     WINDOWS_TERMINAL,
                     PWSH_WINDOWS,
                     POWERSHELL_WINDOWS,
                     CMD,
+                    WEZ_LINUX,
                     KONSOLE,
                     XFCE,
                     ELEMENTARY,
@@ -564,6 +629,7 @@ public interface ExternalTerminalType extends PrefsChoiceValue {
                     ALACRITTY_MACOS,
                     KITTY_MACOS,
                     WARP,
+                    WEZ_MACOS,
                     MACOS_TERMINAL,
                     CUSTOM)
             .filter(terminalType -> terminalType.isSelectable())

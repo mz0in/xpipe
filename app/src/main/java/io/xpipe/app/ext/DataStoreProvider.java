@@ -132,6 +132,10 @@ public interface DataStoreProvider {
 
     default void storageInit() throws Exception {}
 
+    default boolean isShareableFromLocalMachine() {
+        return false;
+    }
+
     default boolean isShareable(DataStoreEntry entry) {
         return true;
     }
@@ -197,6 +201,7 @@ public interface DataStoreProvider {
         SHELL,
         COMMAND,
         TUNNEL,
-        SCRIPT
+        SCRIPT,
+        CLUSTER
     }
 }

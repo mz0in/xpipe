@@ -39,6 +39,9 @@ public class StoreCreationMenu {
         menu.getItems().add(category("addTunnel", "mdi2v-vector-polyline-plus",
                 DataStoreProvider.CreationCategory.TUNNEL, null));
 
+        menu.getItems().add(category("addCluster", "mdi2d-domain-plus",
+                DataStoreProvider.CreationCategory.CLUSTER, null));
+
         menu.getItems().add(category("addDatabase", "mdi2d-database-plus",
                 DataStoreProvider.CreationCategory.DATABASE, null));
     }
@@ -50,7 +53,7 @@ public class StoreCreationMenu {
             item.setGraphic(new FontIcon(graphic));
             item.textProperty().bind(AppI18n.observable(name));
             item.setOnAction(event -> {
-                GuiDsStoreCreator.showCreation(defaultProvider != null ? DataStoreProviders.byName(defaultProvider).orElseThrow() : null,
+                StoreCreationComp.showCreation(defaultProvider != null ? DataStoreProviders.byName(defaultProvider).orElseThrow() : null,
                         v -> category.equals(v.getCreationCategory()));
                 event.consume();
             });
@@ -65,7 +68,7 @@ public class StoreCreationMenu {
                 return;
             }
 
-            GuiDsStoreCreator.showCreation(defaultProvider != null ? DataStoreProviders.byName(defaultProvider).orElseThrow() : null,
+            StoreCreationComp.showCreation(defaultProvider != null ? DataStoreProviders.byName(defaultProvider).orElseThrow() : null,
                     v -> category.equals(v.getCreationCategory()));
             event.consume();
         });
@@ -73,7 +76,7 @@ public class StoreCreationMenu {
             var item = new MenuItem(dataStoreProvider.getDisplayName());
             item.setGraphic(PrettyImageHelper.ofFixedSmallSquare(dataStoreProvider.getDisplayIconFileName(null)).createRegion());
             item.setOnAction(event -> {
-                GuiDsStoreCreator.showCreation(dataStoreProvider,
+                StoreCreationComp.showCreation(dataStoreProvider,
                         v -> category.equals(v.getCreationCategory()));
                 event.consume();
             });
